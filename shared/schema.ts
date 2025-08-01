@@ -1,0 +1,112 @@
+import { pgTable, text, serial, integer, boolean, json, timestamp } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+
+export const products = pgTable("products", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  category: text("category").notNull(), // 'control' or 'traction'
+  model: text("model").notNull(),
+  image: text("image").notNull(),
+  specifications: json("specifications").$type<Record<string, string>>().notNull(),
+  features: json("features").$type<string[]>().notNull(),
+  descriptionKo: text("description_ko").notNull(),
+  descriptionEn: text("description_en").notNull(),
+});
+
+export const inquiries = pgTable("inquiries", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull(),
+  company: text("company"),
+  message: text("message").notNull(),
+  createdAt: text("created_at").notNull().default(new Date().toISOString()),
+});
+
+export const serialNumbers = pgTable("serial_numbers", {
+  id: serial("id").primaryKey(),
+  serialNumber: text("serial_number").notNull().unique(),
+  productId: integer("product_id").references(() => products.id),
+  installationDate: text("installation_date"),
+  location: text("location"),
+  status: text("status").default("active"), // 'active', 'maintenance', 'retired'
+  createdAt: text("created_at").notNull().default(new Date().toISOString()),
+});
+
+export const adminUsers = pgTable("admin_users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(), // hashed password
+  email: text("email").notNull().unique(),
+  role: text("role").default("admin"), // 'admin', 'super_admin'
+  createdAt: timestamp("created_at").defaultNow(),
+  lastLogin: timestamp("last_login"),
+});
+
+export const adminSessions = pgTable("admin_sessions", {
+  id: text("id").primaryKey(),
+  userId: integer("user_id").references(() => adminUsers.id).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertProductSchema = z.object({
+  name: z.string(),
+  category: z.string(),
+  model: z.string(), 
+  image: z.string(),
+  specifications: z.record(z.string()),
+  features: z.array(z.string()),
+  descriptionKo: z.string(),
+  descriptionEn: z.string()
+});
+export const insertInquirySchema = createInsertSchema(inquiries).pick({
+  name: true,
+  email: true,
+  company: true,
+  message: true,
+});
+export const insertSerialNumberSchema = createInsertSchema(serialNumbers).pick({
+  serialNumber: true,
+  productId: true,
+  installationDate: true,
+  location: true,
+  status: true,
+});
+
+export const insertAdminUserSchema = createInsertSchema(adminUsers).pick({
+  username: true,
+  password: true,
+  email: true,
+  role: true,
+});
+
+export const adminLoginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+export const changePasswordSchema = z.object({
+  securityCode: z.string().min(1, "Security code is required"),
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(6, "New password must be at least 6 characters"),
+  confirmPassword: z.string().min(1, "Please confirm your new password"),
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+}).refine((data) => data.securityCode === "1995", {
+  message: "Invalid security code",
+  path: ["securityCode"],
+});
+
+export type InsertProduct = z.infer<typeof insertProductSchema>;
+export type Product = typeof products.$inferSelect;
+export type InsertInquiry = z.infer<typeof insertInquirySchema>;
+export type Inquiry = typeof inquiries.$inferSelect;
+export type InsertSerialNumber = z.infer<typeof insertSerialNumberSchema>;
+export type SerialNumber = typeof serialNumbers.$inferSelect;
+export type AdminUser = typeof adminUsers.$inferSelect;
+export type InsertAdminUser = z.infer<typeof insertAdminUserSchema>;
+export type AdminLogin = z.infer<typeof adminLoginSchema>;
+export type ChangePassword = z.infer<typeof changePasswordSchema>;
+export type AdminSession = typeof adminSessions.$inferSelect;
